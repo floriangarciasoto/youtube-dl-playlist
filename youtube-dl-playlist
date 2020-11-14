@@ -1,0 +1,76 @@
+#!/bin/bash
+
+if [ $# -eq 1 ]; then
+	source=$1
+	((ok=0))
+	echo -n "Checking if argument is a file ... "
+	if [ -f $source ]; then
+		echo "OK"
+		echo -n "Checking if file contains HTML ... "
+		if [ $(cat $source | grep -o '<title>.*</title>' | wc -l) -eq 1 ]; then
+			echo "OK"
+			echo -n "Checking if the file is a saved file from browser ... "
+			if [ $(cat $source | grep -o '"yt-simple-endpoint style-scope ytd-playlist-video-renderer.*/watch?v=.*list' | wc -l) -gt 0 ]; then
+				echo "OK"
+				cat $source | grep -o '"yt-simple-endpoint style-scope ytd-playlist-video-renderer.*/watch?v=.*list' | sed -e 's/"yt-simple-endpoint style-scope ytd-playlist-video-renderer" href="\(.*\)&amp;list/\1/' > /tmp/ytdlplurls
+				((ok=1))
+			else
+				echo "NO"
+				echo -n "Checking if there is YouTube videos URLs in file ... "
+				if [ $(cat $source | grep -o -E 'videoId":".{11}"' | wc -l) -gt 0 ]; then
+					echo "OK"
+					cat $source | grep -o -E 'videoId":".{11}"' | awk '!visited[$0]++' | sed -e 's/videoId":"\(.*\)"/https:\/\/www.youtube.com\/watch?v=\1/' > /tmp/ytdlplurls
+					((ok=1))
+				else
+					echo -e "NO\nError: There is no YouTube videos URL in specified file."
+				fi
+			fi
+		else echo -e "NO\nError: The file does not contains valid HTML code."
+		fi
+	else
+		echo "NO"
+		echo -n "Checking if argument is a YouTube playlist ID ... "
+		if [ $(echo $source | grep https:// | wc -l) -eq 0 ]; then
+			echo "OK"
+			source="https://www.youtube.com/playlist?list=$source"
+			echo "Prepended 'https://www.youtube.com/playlist?list=' to YouTube ID."
+		else echo "NO"
+		fi
+		echo -n "Checking if argument is a valid URL ... "
+		if [ $(echo $source | grep '^https://www.youtube.com/playlist?list=' | wc -l) -eq 1 ]; then
+			echo "OK"
+			echo -n "Checking if the URL exists ($source) ... "
+			if [ $(curl -Is $source | head -1 | grep 200 | wc -l) -eq 1 ]; then
+				echo "OK"
+				echo -n "Downloading webpage ... "
+				wget $source -qO /tmp/ytdlplwp
+				source='/tmp/ytdlplwp'
+				echo "OK"
+				echo -n "Checking if there is YouTube videos URLs in webpage ... "
+				if [ $(cat /tmp/ytdlplwp | grep -o -E 'videoId":".{11}"' | wc -l) -gt 0 ]; then
+					echo "OK"
+					cat /tmp/ytdlplwp | grep -o -E 'videoId":".{11}"' | awk '!visited[$0]++' | sed -e 's/videoId":"\(.*\)"/https:\/\/www.youtube.com\/watch?v=\1/' > /tmp/ytdlplurls
+					((ok=1))
+				else echo -e "NO\nError: There is no YouTube videos URL in webpage from specified URL."
+				fi
+			else echo -e "NO\nError: URL does not exists."
+			fi
+		else echo -e "NO\nError: argument is not a valid URL."
+		fi
+	fi
+	if [ $ok -eq 1 ];then
+		title=$(cat $source | grep -o '<title>.*</title>' | sed -e 's/<title>\(.*\) - YouTube<\/title>/\1/')
+		echo "Title is: $title"
+		echo -n "Display URLs found? (Y/N) [N] "
+		read response
+		if [ "$response" == "Y" -o "$response" == "y" ]; then cat -n /tmp/ytdlplurls; fi
+		echo -n "Start download? (Y/N) [Y] "
+		read response
+		if [ "$response" == "Y" -o "$response" == "y" -o "$response" == "" ]; then
+			mkdir -p "$title"
+			cd "$title"
+			youtube-dl -i -o '%(title)s.%(ext)s' -a /tmp/ytdlplurls
+		fi
+	fi
+else echo "Usage: youtube-dl-playlist [OPTIONS ...] <ID|URL|FILE>"
+fi
