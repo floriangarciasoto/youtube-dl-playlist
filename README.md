@@ -1,6 +1,9 @@
 # youtube-dl-playlist
+
 Tool for downloading videos from YouTube playlist.
-<br/>youtube-dl required: https://youtube-dl.org/
+
+## Installation
+Before installing this tool, install youtube-dl first : https://youtube-dl.org/
 <br/>Installation of this tool:
 ```bash
 $ mkdir ~/.local/bin
